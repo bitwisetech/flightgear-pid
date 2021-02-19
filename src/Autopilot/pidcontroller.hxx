@@ -58,8 +58,20 @@ private:
     double edf_n_1;             // edf[n-1] (derivative error)
     double edf_n_2;             // edf[n-2] (derivative error)
     double u_n_1;               // u[n-1]   (output)
-    double desiredTs;            // desired sampling interval (sec)
-    double elapsedTime;          // elapsed time (sec)
+    double desiredTs;           // desired sampling interval (sec)
+    double elapsedTime;         // elapsed time (sec)
+    // 
+    double delta_P;             // Incremental value for PID Term -> props tree
+    double delta_I;             // Incremental value for PID Term -> props tree
+    double delta_D;             // Incremental value for PID Term -> props tree
+    double accum_P;             // Running Total for PID Term -> props tree
+    double accum_I;             // Running Total for PID Term -> props tree
+    double accum_D;             // Running Total for PID Term -> props tree
+ 
+    // Expose values so that disabled() may share with update()
+    double u_n;
+    double r_n;
+    double y_n;
 
 protected:
     virtual bool configure( SGPropertyNode& cfg_node,
@@ -74,6 +86,10 @@ public:
     static const char* staticSubsystemClassId() { return "pid-controller"; }
 
     void update( bool firstTime, double dt );
+
+    // HP: Override function so that pid may shadow output prop when disabled 
+    void disabled( double dt);
+       
 };
 
 }

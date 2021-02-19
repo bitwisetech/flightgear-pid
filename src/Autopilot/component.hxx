@@ -30,6 +30,7 @@
 #include <simgear/structure/subsystem_mgr.hxx>
 #include <simgear/props/propsfwd.hxx>
 
+
 namespace FGXMLAutopilot {
 
 /**
@@ -77,6 +78,18 @@ protected:
      */
     bool _honor_passive;
 
+    /** 
+     * @brief a (  new   ) flag signalling the derived class that it should set     it's internal
+     *        state by copiying output property into PID current value and zero-ing the error term.
+     */
+    bool _pid_shadows;
+    
+    /** 
+     * @brief a (  new   ) flag signalling the derived class that it should show    it's internal
+     *        state by copiying accumulated P, I D, term components of control output.
+     */
+    bool _show_terms;
+    
 public:
     /**
      * @brief A constructor for an empty Component.

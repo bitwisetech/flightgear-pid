@@ -31,7 +31,9 @@ Component::Component() :
   _enable_value(NULL),
   _enabled(false),
   _debug(false),
-  _honor_passive(false)
+  _honor_passive(false),
+  _pid_shadows(false),
+  _show_terms(false)
 {
 }
 
@@ -81,6 +83,18 @@ bool Component::configure( SGPropertyNode& cfg_node,
   if ( cfg_name == "debug" )
   {
     _debug = cfg_node.getBoolValue();
+    return true;
+  }
+
+  if ( cfg_name == "pid-shadows" )
+  {
+    _pid_shadows = cfg_node.getBoolValue();
+    return true;
+  }
+
+  if ( cfg_name == "show-terms" )
+  {
+    _show_terms = cfg_node.getBoolValue();
     return true;
   }
 
