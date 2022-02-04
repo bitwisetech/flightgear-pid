@@ -59,6 +59,9 @@ void _calculateAcceleration(Airplane* a, float aoa_rad, float speed_mps, float* 
     s.localToGlobal(output, output);    
 };
 
+// Comments are incorrect: Historically this function only produces lift, drag curves
+//   For lift, drag and LD  three column output please use --yasim-graph-detailed
+//
 // Generate a graph of lift, drag and L/D against AoA at the specified
 // speed and altitude.  The result is a tab-separated file of
 // numbers: "aoa lift drag LD" (aoa in degrees, lift and drag in
@@ -77,8 +80,8 @@ void yasim_graph(Airplane* a, const float alt, const float kts, Airplane::Config
     float cl_max = 0, cd_min = 1e6, ld_max = 0;
     int   cl_max_deg = 0, cd_min_deg = 0, ld_max_deg = 0;
     
-    printf("aoa\tLift\tDrag\tLvsD\n");
-    for(int deg=-5; deg<=29; deg++) {
+    printf("aoa\tlift\tdrag\n");
+    for(int deg=-15; deg<=90; deg++) {
         float aoa = deg * DEG2RAD;
         _calculateAcceleration(a, aoa, speed, acc);
         float drag = acc[0] * (-1/9.8);
@@ -97,7 +100,7 @@ void yasim_graph(Airplane* a, const float alt, const float kts, Airplane::Config
             ld_max= ld;
             ld_max_deg = deg;
         }    
-        printf("%2d\t%.4f\t%.4f\t%.4f\n", deg, lift, drag, ld);
+        printf("%2d\t%.4f\t%.4f\n", deg, lift, drag);
     }
     printf("# cl_max %.4f at %d deg\n", cl_max, cl_max_deg);
     printf("# cd_min %.4f at %d deg\n", cd_min, cd_min_deg);
@@ -235,6 +238,94 @@ void findMinSpeed(Airplane* a, float alt)
     }
 }
 
+// Additional command functions with 10x detail, smaller AoA range
+//
+// Generate a graph of lift, drag and L/D against AoA at the specified
+// speed and altitude with fine deteil. The result is a tab-separated file of
+// numbers: "aoa lift drag LD" (aoa in degrees, lift and drag in
+// G's).  You can use this in gnuplot like so (assuming the output is
+// in a file named "dat":
+/*
+ plot "dat" using 1:2 with lines title 'lift', \ 
+      "dat" using 1:3 with lines title 'drag', \ 
+      "dat" using 1:4 with lines title 'LD'
+*/
+void yasim_graph_detailed(Airplane* a, const float alt, const float kts, Airplane::Configuration cfgID)
+{
+    _setup(a, cfgID, alt);
+    float speed = kts * KTS2MPS;
+    float acc[3] {0,0,0};
+    float cl_max = 0, cd_min = 1e6, ld_max = 0;
+    int   cl_max_deg = 0, cd_min_deg = 0, ld_max_deg = 0;
+    
+    printf("aoa\tlift\tdrag\tLD\n");
+    for(float  deg=-2.0; deg<=25.0 ; deg+= 0.10 ) {
+        float aoa = deg * DEG2RAD;
+        _calculateAcceleration(a, aoa, speed, acc);
+        float drag = acc[0] * (-1/9.8);
+        float lift = 1 + acc[2] * (1/9.8);
+        float ld = lift/drag;
+        
+        if (cd_min > drag) {
+            cd_min = drag;
+            cd_min_deg = deg;
+        }
+        if (cl_max < lift) {
+            cl_max = lift;
+            cl_max_deg = deg;
+        }
+        if (ld_max < ld) {
+            ld_max= ld;
+            ld_max_deg = deg;
+        }    
+        printf("%-2.1f\t%-2.3f\t%-2.3f\t%-2.3f\n", deg, lift, drag, ld);
+    }
+    //printf("# cl_max %.4f at %d deg\n", cl_max, cl_max_deg);
+    //printf("# cd_min %.4f at %d deg\n", cd_min, cd_min_deg);
+    //printf("# ld_max %.4f at %d deg\n", ld_max, ld_max_deg);  
+}
+
+void yasim_drag_detailed(Airplane* a, const float aoa, const float alt, Airplane::Configuration cfgID)
+{
+    _setup(a, cfgID, alt);
+    
+    float cd_min = 1e6;
+    int cd_min_kts = 0;
+    float acc[3] {0,0,0};
+    
+    printf("knots\tdrag\n");    
+    for(float kts=0; kts<=100; kts += 0.1) {
+        _calculateAcceleration(a, aoa,kts * KTS2MPS, acc);        
+        float drag = acc[0] * (-1/9.8);        
+        if (cd_min > drag) {
+            cd_min = drag;
+            cd_min_kts = kts;
+        }
+        printf("%-2.3f\t%-2.3f\n", kts, drag);
+    }
+    //printf("# cd_min %g at %d kts\n", cd_min, cd_min_kts);
+}
+
+void findMinSpeedDetailed(Airplane* a, float alt)
+{
+    a->addControlSetting(Airplane::CRUISE, "/controls/flight/elevator-trim", 0.7f);
+    _setup(a, Airplane::CRUISE, alt);
+    float acc[3];
+
+    printf("aoa\tknots\tlift\n");
+    for(float deg=-2; deg<=25.0; deg+=0.10) {
+        float aoa = deg * DEG2RAD;
+        for(float kts = 0; kts <= 180.0; kts += 0.1) {
+            _calculateAcceleration(a, aoa, kts * KTS2MPS, acc);
+            float lift = acc[2];
+            if (lift > 0) {
+                printf("%-2.1f \t %-2.3f \t %-2.3f\n", deg, kts, ( 100 + 100 * lift));
+                break;
+            }
+        }
+    }
+}
+
 void report(Airplane* a)
 {
     printf("==========================\n");
@@ -270,7 +361,7 @@ void report(Airplane* a)
       MACy = wing->getMACy();
       sweepMin = wing->getSweepLEMin() * RAD2DEG;
       sweepMax = wing->getSweepLEMax() * RAD2DEG;
-      printf("Wing MAC          : (x:%.2f, y:%.2f), length:%.1f \n", MACx, MACy, MAC);
+      printf("Wing MAC          : (x:%.3f, y:%.3f), length:%.3f \n", MACx, MACy, MAC);
       printf("hard limit CG-x   : %.3f m\n", a->getCGHardLimitXMax());
       printf("soft limit CG-x   : %.3f m\n", a->getCGSoftLimitXMax());
       printf("CG-x              : %.3f m\n", cg[0]);
@@ -296,10 +387,12 @@ void report(Airplane* a)
       printf("\n");
       wing->printSectionInfo();
     }
-    printf("\nInertia tensor [kg*m^2], origo at CG:\n\n");
-    printf("  %7.0f, %7.0f, %7.0f\n", SI_inertia[0], SI_inertia[1], SI_inertia[2]);
-    printf("  %7.0f, %7.0f, %7.0f\n", SI_inertia[3], SI_inertia[4], SI_inertia[5]);
-    printf("  %7.0f, %7.0f, %7.0f\n", SI_inertia[6], SI_inertia[7], SI_inertia[8]);
+    printf("\nInertia Tensor [kg*m^2], ( Angular Moments ) Origo at CG:\n\n");
+    printf("                           Effect on Axis\n");
+    printf("                      x Roll  y Pitch    z Yaw\n");
+    printf("Impulse  x    Roll   %7.0f  %7.0f  %7.0f\n", SI_inertia[0], SI_inertia[1], SI_inertia[2]);
+    printf("  on     y   Pitch   %7.0f  %7.0f  %7.0f\n", SI_inertia[3], SI_inertia[4], SI_inertia[5]);
+    printf(" Axis    z     Yaw   %7.0f  %7.0f  %7.0f\n", SI_inertia[6], SI_inertia[7], SI_inertia[8]);
 }
 
 int usage()
@@ -307,7 +400,7 @@ int usage()
     fprintf(stderr, "Usage: \n");
     fprintf(stderr, "  yasim <aircraft.xml> [-g [-a meters] [-s kts] [-approach | -cruise] ]\n");
     fprintf(stderr, "  yasim <aircraft.xml> [-d [-a meters] [-approach | -cruise] ]\n");
-    fprintf(stderr, "  yasim <aircraft.xml> [-m]\n");
+    fprintf(stderr, "  yasim <aircraft.xml> [-m] [-h] [--min-speed]\n");
     fprintf(stderr, "  yasim <aircraft.xml> [-test] [-a meters] [-s kts] [-approach | -cruise] ]\n");
     fprintf(stderr, "                       -g print lift/drag table: aoa, lift, drag, lift/drag \n");
     fprintf(stderr, "                       -d print drag over TAS: kts, drag\n");
@@ -316,6 +409,10 @@ int usage()
     fprintf(stderr, "                       -a set altitude in meters!\n");
     fprintf(stderr, "                       -s set speed in knots\n");
     fprintf(stderr, "                       -m print mass distribution table: id, x, y, z, mass \n");
+    fprintf(stderr, "                     Options to generate LD curve and greater deteiled plotting\n");
+    fprintf(stderr, "  yasim <aircraft.xml> [--detailed-graph] [--detailed-drag]\n");
+    fprintf(stderr, "  yasim <aircraft.xml> [--detailed-min-speed -approach]\n");
+    fprintf(stderr, "  yasim <aircraft.xml> [--detailed-min-speed -cruise]\n");
     fprintf(stderr, "                       -test print summary and output like -g -m \n");
     return 1;
 }
@@ -355,7 +452,54 @@ int main(int argc, char** argv)
         Airplane::Configuration cfg = Airplane::NONE;
         float alt = 5000, kts = 100;
 
-        if((strcmp(argv[2], "-g") == 0) || test) {
+// command extensions tested first to preserve precedence
+        if((strcmp(argv[2], "--detailed-graph") == 0) || test) {
+            for(int i=3; i<argc; i++) {
+                if (std::strcmp(argv[i], "-a") == 0) {
+                    if (i+1 < argc) alt = std::atof(argv[++i]);
+                }
+                else if(std::strcmp(argv[i], "-s") == 0) {
+                    if(i+1 < argc) kts = std::atof(argv[++i]);
+                }
+                else if(std::strcmp(argv[i], "-approach") == 0) cfg = Airplane::APPROACH;
+                else if(std::strcmp(argv[i], "-cruise") == 0) cfg = Airplane::CRUISE;
+                else return usage();
+            }
+            if (test) {
+                report(a);
+                printf("\n#-- lift, drag at altitude %.0f meters, %.0f knots, Config %d --\n", alt, kts, cfg);
+            }
+            yasim_graph_detailed(a, alt, kts, cfg);
+            if (test) {
+                printf("\n#-- mass distribution --\n");
+                yasim_masses(a);
+            }
+        } 
+        else if(strcmp(argv[2], "--detailed-drag") == 0) {
+            float alt = 2000, aoa = a->getCruiseAoA();
+            for(int i=3; i<argc; i++) {
+                if (std::strcmp(argv[i], "-a") == 0) {
+                    if (i+1 < argc) alt = std::atof(argv[++i]);
+                }
+                else if(std::strcmp(argv[i], "-approach") == 0) cfg = Airplane::APPROACH;
+                else if(std::strcmp(argv[i], "-cruise") == 0) cfg = Airplane::CRUISE;
+                else return usage();
+            }
+            yasim_drag_detailed(a, aoa, alt, cfg);
+        }
+        else if(strcmp(argv[2], "--detailed-min-speed") == 0) {
+            alt = 10;
+            for(int i=3; i<argc; i++) {
+                if (std::strcmp(argv[i], "-a") == 0) {
+                    if (i+1 < argc) alt = std::atof(argv[++i]);
+                }
+                else if(std::strcmp(argv[i], "-approach") == 0) cfg = Airplane::APPROACH;
+                else if(std::strcmp(argv[i], "-cruise") == 0) cfg = Airplane::CRUISE;
+                else return usage();
+            }
+            findMinSpeedDetailed(a, alt);
+        }
+        else if((strcmp(argv[2], "-g") == 0) || test) {
             for(int i=3; i<argc; i++) {
                 if (std::strcmp(argv[i], "-a") == 0) {
                     if (i+1 < argc) alt = std::atof(argv[++i]);
